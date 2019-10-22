@@ -1,78 +1,68 @@
-import os
-
 import telebot
-
+from bot.config import CONFIG
+from .parser import Text, Photo
 from logger import log
-
-BOT_TOKEN = os.environ['BOT_TOKEN']
-
 
 class Server:
     def __init__(self):
-        self.bot = telebot.TeleBot(BOT_TOKEN)
-        self.name = ''
-        self.surname = ''
-        self.age = 0
+        self.bot = telebot.TeleBot(CONFIG.bot_token)
+        self.handler = {
+            'text': Text(self.bot),
+            'photo': Photo(self.bot)
+        }
 
-        @self.bot.message_handler(content_types=['text'])
+        @self.bot.message_handler(content_types=['text', 'photo'])
         def _get_text_messages(message):
-            self.get_text_messages(message)
+            log(log.INFO, "received [%s]", message.content_type)
+            self.handler[message.content_type].message(message)
 
-        @self.bot.callback_query_handler(func=lambda call: True)
-        def _callback_worker(call):
-            self.callback_worker(call)
+        @self.bot.edited_message_handler(content_types=['text', 'photo'])
+        def _on_edited_message(message):
+            self.handler[message.content_type].edited_message(message)
 
-    def get_text_messages(self, message):
-        log(log.INFO, 'get_text_messages %s', message.text)
-        if message.text == "Привет":
-            self.bot.send_message(message.from_user.id, "Привет, чем я могу тебе помочь?")
-        elif message.text == "/help":
-            self.bot.send_message(message.from_user.id, "Напиши привет что бы поздороваться , "
-                                                        "или напиши /reg для того что бы я с тобой познакомился")
-        elif message.text == "/reg":
-            self.bot.send_message(message.from_user.id, "Как тебя зовут?")
-            self.bot.register_next_step_handler(message, self.get_name)
-        else:
-            self.bot.send_message(message.from_user.id, "Я тебя не понимаю. Напиши /help.")
+        # noinspection PyUnusedLocal
+        @self.bot.channel_post_handler(content_types=['text', 'photo'])
+        def __handler(*args, **kwargs):
+            log(log.WARNING, '>>>channel_post<<<')
 
-    def get_name(self, message):
-        log(log.INFO, 'get_name %s', message.text)
-        self.name = message.text
-        self.bot.send_message(message.from_user.id, 'Какая у тебя фамилия?')
-        self.bot.register_next_step_handler(message, self.get_surname)
+        # noinspection PyUnusedLocal
+        @self.bot.edited_channel_post_handler(content_types=['text', 'photo'])
+        def __handler(*args, **kwargs):
+            log(log.WARNING, '>>>edited_channel_post<<<')
 
-    def get_surname(self, message):
-        log(log.INFO, 'get_surname %s', message.text)
-        self.surname = message.text
-        self.bot.send_message(message.from_user.id, 'Сколько тебе лет?')
-        self.bot.register_next_step_handler(message, self.get_age)
+        # noinspection PyUnusedLocal
+        @self.bot.inline_handler
+        def __handler(*args, **kwargs):
+            log(log.WARNING, '>>>inline<<<')
 
-    def get_age(self, message):
-        log(log.INFO, 'get_age %s', message.text)
-        while self.age == 0:
-            try:
-                self.age = int(message.text)
-            except ValueError:
-                log(log.WARNING, 'age_is_not_int %s', message.text)
-                self.bot.send_message(message.from_user.id, 'Цифрами, пожалуйста')
-                self.bot.register_next_step_handler(message, self.get_age)
-                return
-            keyboard = telebot.types.InlineKeyboardMarkup()
-            log(log.INFO, 'inline_keyboard_button')
-            key_yes = telebot.types.InlineKeyboardButton(text='Да', callback_data='yes')
-            keyboard.add(key_yes)
-            key_no = telebot.types.InlineKeyboardButton(text='Нет', callback_data='no')
-            keyboard.add(key_no)
-            question = 'Тебе ' + str(self.age) + ' лет, тебя зовут ' + self.name + ' ' + self.surname + '?'
-            self.bot.send_message(message.from_user.id, text=question, reply_markup=keyboard)
+        # noinspection PyUnusedLocal
+        @self.bot.chosen_inline_handler
+        def __handler(*args, **kwargs):
+            log(log.WARNING, '>>>chosen_inline<<<')
 
-    def callback_worker(self, call):
-        if call.data == "yes":
-            self.bot.send_message(call.message.chat.id, 'Запомню : )')
-            log(log.INFO, 'registration_complete')
-        # elif call.data == "no":
-        #     pass
+        # noinspection PyUnusedLocal
+        @self.bot.callback_query_handler
+        def __handler(*args, **kwargs):
+            log(log.WARNING, '>>>callback_query<<<')
+
+        # noinspection PyUnusedLocal
+        @self.bot.shipping_query_handler
+        def __handler(*args, **kwargs):
+            log(log.WARNING, '>>>shipping_query<<<')
+
+        # noinspection PyUnusedLocal
+        @self.bot.pre_checkout_query_handler
+        def __handler(*args, **kwargs):
+            log(log.WARNING, '>>>pre_checkout_query<<<')
 
     def run(self):
-        log(log.INFO, 'starting... ')
+        log(log.INFO, 'starting bot server... ')
+        me = self.get_me()
+        for attr in me:
+            log(log.INFO, "%s: %s", attr, me[attr])
         self.bot.polling(none_stop=True, interval=0)
+
+    def get_me(self):
+        me = self.bot.get_me()
+        attributes = [a for a in dir(me) if not a.startswith('_') and not callable(getattr(me, a))]
+        return {a: getattr(me, a) for a in attributes}

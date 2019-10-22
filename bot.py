@@ -1,8 +1,5 @@
 import os
-for env in os.environ:
-    print(env, "=", os.environ[env])
-
-from bot import Server
+from bot.server import Server
 
 
 def main():
